@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1d5c3f">
+<link rel="manifest" href="manifest.json">
+<title>مدیریت مرغداری</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+<style>
+:root{--bg:#edf0e8;--cd:#fff;--tx:#17261d;--mu:#68746b;--pr:#1d5c3f;--yk:#f2b632;--rd:#b8372b;--gn:#1d7a4d;--bd:#d9dfd3}
+@media(prefers-color-scheme:dark){:root{--bg:#111713;--cd:#1a231d;--tx:#e6ede7;--mu:#92a095;--pr:#3fae7a;--yk:#f2b632;--rd:#ea6e60;--gn:#4ec08a;--bd:#2a362d}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.7 Tahoma,system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom))}
+#app{padding:14px;max-width:560px;margin:auto}
+h2{margin:6px 0 12px;font-size:19px}
+.cd{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.rw{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.tap{cursor:pointer}
+.mu{color:var(--mu);font-size:13px}
+.tot{background:var(--pr);color:#fff;border:0;border-radius:10px;padding:16px;margin-bottom:12px}
+.tot b{display:block;font-size:30px;line-height:1.3}
+.tot small{opacity:.85}
+.dn{color:var(--rd);font-weight:700}.up{color:var(--gn);font-weight:700}
+.b{background:var(--pr);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer}
+.b.g{background:transparent;color:var(--pr);border:1px solid var(--pr)}
+.b.r{background:var(--rd)}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+nav{position:fixed;bottom:0;inset-inline:0;display:flex;background:var(--cd);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;text-align:center;padding:12px 0;color:var(--mu);cursor:pointer}
+nav a.on{color:var(--pr);font-weight:700;box-shadow:inset 0 3px 0 var(--yk)}
+.mo{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-end;z-index:9}
+.sh{background:var(--cd);width:100%;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.sh label{display:block;margin-bottom:10px;font-size:13px;color:var(--mu)}
+.sh input:not([type=checkbox]),.sh select{display:block;width:100%;margin-top:3px;padding:10px;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px}
+.sh input[type=checkbox]{width:20px;height:20px;vertical-align:middle;margin-inline-end:8px}
+.tag{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--bd)}
+.tag.on{background:var(--yk);color:#2b2100}
+.ft{text-align:center;padding:16px 0 4px;font-size:12px}.ft a{color:var(--mu);text-decoration:none}
+.tag.age{background:var(--pr);color:#fff}
+.sh small{display:block;margin-top:2px}
+.dt{cursor:pointer}
+.pk{z-index:20;align-items:center;justify-content:center}.pk .sh{width:min(340px,92vw);border-radius:14px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;margin:10px 0}
+.cal span{font-size:12px;color:var(--mu)}
+.cal button{border:0;background:transparent;color:var(--tx);font:inherit;padding:9px 0;border-radius:8px}
+.cal button.sel{background:var(--pr);color:#fff}.cal button.td{box-shadow:inset 0 0 0 1px var(--yk)}
+.ps{display:flex;gap:6px;align-items:center}.ps select{flex:1;margin:0!important}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<nav><a id="n-farmers" onclick="go('farmers')">مرغداران</a><a id="n-halls" onclick="go('halls')">سالن‌ها</a><a id="n-set" onclick="go('set')">تنظیمات</a></nav>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nd=s=>String(s).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+const fmt=n=>Math.round(n||0).toLocaleString('fa-IR');
+const p2=n=>String(n).padStart(2,'0');
+const BT={broiler:'گوشتی',layer:'تخمگذار'};
+
+/* ---------- تاریخ شمسی ---------- */
+function g2j(gy,gm,gd){const t=[0,31,59,90,120,151,181,212,243,273,304,334];let jy=gm>2?gy+1:gy;let d=355666+365*gy+~~((jy+3)/4)-~~((jy+99)/100)+~~((jy+399)/400)+gd+t[gm-1];jy=-1595+33*~~(d/12053);d%=12053;jy+=4*~~(d/1461);d%=1461;if(d>365){jy+=~~((d-1)/365);d=(d-1)%365}const jm=d<186?1+~~(d/31):7+~~((d-186)/30);const jd=1+(d<186?d%31:(d-186)%30);return[jy,jm,jd]}
+function j2g(jy,jm,jd){jy+=1595;let d=-355668+365*jy+~~(jy/33)*8+~~(((jy%33)+3)/4)+jd+(jm<7?(jm-1)*31:(jm-7)*30+186);let gy=400*~~(d/146097);d%=146097;if(d>36524){gy+=100*~~(--d/36524);d%=36524;if(d>=365)d++}gy+=4*~~(d/1461);d%=1461;if(d>365){gy+=~~((d-1)/365);d=(d-1)%365}let gd=d+1;const s=[0,31,(gy%4==0&&gy%100!=0)||gy%400==0?29:28,31,30,31,30,31,31,30,31,30,31];let gm;for(gm=0;gm<13&&gd>s[gm];gm++)gd-=s[gm];return[gy,gm,gd]}
+function today(){const d=new Date(),j=g2j(d.getFullYear(),d.getMonth()+1,d.getDate());return j[0]+'-'+p2(j[1])+'-'+p2(j[2])}
+function normDate(s){const a=nd(s).split(/[-\/.]/).map(Number);if(a.length!==3||a.some(isNaN))return '';return a[0]+'-'+p2(a[1])+'-'+p2(a[2])}
+const nextM=m=>{let[y,k]=m.split('-').map(Number);if(++k>12){k=1;y++}return y+'-'+p2(k)};
+const prevM=m=>{let[y,k]=m.split('-').map(Number);if(--k<1){k=12;y--}return y+'-'+p2(k)};
+const dnum=s=>{const[y,m,d]=s.split('-').map(Number),g=j2g(y,m,d);return Date.UTC(g[0],g[1]-1,g[2])/864e5};
+const shown=s=>s?s.replace(/-/g,'/'):'—';
+
+/* ---------- دیتابیس SQLite (sql.js) ذخیره در IndexedDB ---------- */
+let db,SQL;
+const idb=(m,v,k='db')=>new Promise((res,rej)=>{const r=indexedDB.open('poultry',1);r.onupgradeneeded=()=>r.result.createObjectStore('s');r.onerror=rej;r.onsuccess=()=>{const st=r.result.transaction('s',m==='get'?'readonly':'readwrite').objectStore('s');const q=m==='get'?st.get(k):st.put(v,k);q.onsuccess=()=>res(q.result);q.onerror=rej}});
+let dirH=null,dirPerm='granted',tm;
+let lastB=null,dirOk='';
+const save=()=>{const b=lastB=db.export();idb('put',b);clearTimeout(tm);tm=setTimeout(()=>toDir(b),300)};
+addEventListener('visibilitychange',()=>{if(document.hidden&&lastB){clearTimeout(tm);toDir(lastB)}});
+addEventListener('pagehide',()=>{if(lastB)toDir(lastB)});
+async function toDir(b){
+ if(!dirH)return;
+ try{
+  if(await dirH.queryPermission({mode:'readwrite'})!=='granted')return;
+  const fh=await dirH.getFileHandle('poultry.sqlite',{create:true}),w=await fh.createWritable();
+  await w.write(b);await w.close();dirOk=new Date().toLocaleTimeString('fa-IR');
+ }catch(e){}
+}
+const q=(s,p=[])=>{const st=db.prepare(s);st.bind(p);const r=[];while(st.step())r.push(st.getAsObject());st.free();return r};
+const run=(s,p=[])=>{db.run(s,p);save()};
+const SCHEMA=`
+CREATE TABLE IF NOT EXISTS farmers(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,phone TEXT);
+CREATE TABLE IF NOT EXISTS halls(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,address TEXT,capacity INTEGER NOT NULL,
+ bird_type TEXT NOT NULL CHECK(bird_type IN('broiler','layer')),owner_name TEXT,farmer_id INTEGER NOT NULL REFERENCES farmers(id),
+ contract_start TEXT NOT NULL,contract_end TEXT,charge_first INTEGER NOT NULL DEFAULT 1,charge_last INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS cycles(id INTEGER PRIMARY KEY AUTOINCREMENT,hall_id INTEGER NOT NULL REFERENCES halls(id),placement_date TEXT NOT NULL,loading_date TEXT);
+CREATE TABLE IF NOT EXISTS tariffs(id INTEGER PRIMARY KEY AUTOINCREMENT,bird_type TEXT NOT NULL,price_per_bird INTEGER NOT NULL,effective_from TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS transactions(id INTEGER PRIMARY KEY AUTOINCREMENT,farmer_id INTEGER NOT NULL REFERENCES farmers(id),hall_id INTEGER REFERENCES halls(id),
+ type TEXT NOT NULL CHECK(type IN('charge','debt','payment')),amount INTEGER NOT NULL,month_key TEXT,date TEXT NOT NULL,note TEXT);
+CREATE TABLE IF NOT EXISTS placements(id INTEGER PRIMARY KEY AUTOINCREMENT,cycle_id INTEGER NOT NULL REFERENCES cycles(id),date TEXT NOT NULL,cnt INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS loadings(id INTEGER PRIMARY KEY AUTOINCREMENT,cycle_id INTEGER NOT NULL REFERENCES cycles(id),date TEXT NOT NULL,cnt INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY,v TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_charge ON transactions(hall_id,month_key) WHERE type='charge';`;
+
+function col(t,c,d){if(!q('pragma table_info('+t+')').some(r=>r.name===c))db.run('alter table '+t+' add column '+c+' '+d)}
+function initDb(){
+ db.exec(SCHEMA);
+ const first=!q('pragma table_info(cycles)').some(r=>r.name==='losses');
+ [['loading_end','TEXT'],['end_date','TEXT'],['losses','INTEGER DEFAULT 0'],['diseases','TEXT'],['loss_logged','INTEGER DEFAULT 0'],['vaccine_logged','INTEGER DEFAULT 0'],['system_cost','INTEGER DEFAULT 0']].forEach(a=>col('cycles',a[0],a[1]));
+ col('transactions','cycle_id','INTEGER');
+ col('transactions','loading_id','INTEGER');
+ [['q_user','TEXT'],['q_pass','TEXT'],['epi_code','TEXT'],['unique_code','TEXT']].forEach(a=>col('halls',a[0],a[1]));
+ col('cycles','license_code','TEXT');
+ if(first)db.run('insert into placements(cycle_id,date,cnt) select id,placement_date,0 from cycles');
+ save();
+}
+/* ---------- شارژ خودکار ماهانه ---------- */
+function charges(){
+ const cur=today().slice(0,7);
+ q('select * from halls').forEach(h=>{
+  let s=h.contract_start.slice(0,7);if(!h.charge_first)s=nextM(s);
+  let e=cur;
+  if(h.contract_end){let x=h.contract_end.slice(0,7);if(!h.charge_last)x=prevM(x);if(x<e)e=x}
+  for(let m=s;m<=e;m=nextM(m)){
+   const t=q('select price_per_bird p from tariffs where bird_type=? and effective_from<=? order by effective_from desc limit 1',[h.bird_type,m])[0];
+   if(!t)continue;
+   db.run("insert or ignore into transactions(farmer_id,hall_id,type,amount,month_key,date,note) values(?,?,'charge',?,?,?,?)",[h.farmer_id,h.id,h.capacity*t.p,m,today(),'هزینه ماهانه پروانه '+m]);
+  }
+ });
+ save();
+}
+
+/* ---------- تقویم شمسی ---------- */
+const MN=['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+const fa=n=>Number(n).toLocaleString('fa-IR',{useGrouping:false});
+function mlen(y,m){if(m<7)return 31;if(m<12)return 30;const g=j2g(y,12,30),j=g2j(g[0],g[1],g[2]);return j[0]===y&&j[1]===12&&j[2]===30?30:29}
+function pick(inp){
+ const sel=normDate(inp.value),td=today();
+ let[y,m]=(sel||td).split('-').map(Number);
+ const o=document.createElement('div');o.className='mo pk';
+ const draw=()=>{
+  const g=j2g(y,m,1),off=(new Date(g[0],g[1]-1,g[2]).getDay()+1)%7,n=mlen(y,m);
+  let c='';for(let i=0;i<off;i++)c+='<span></span>';
+  for(let i=1;i<=n;i++){const k=y+'-'+p2(m)+'-'+p2(i);c+='<button type="button" data-d="'+i+'" class="'+(k===sel?'sel':k===td?'td':'')+'">'+fa(i)+'</button>'}
+  let ys='';for(let v=y-8;v<=y+8;v++)ys+='<option value="'+v+'"'+(v===y?' selected':'')+'>'+fa(v)+'</option>';
+  o.innerHTML='<div class="sh"><div class="ps"><button type="button" class="b g" data-s="-1">›</button><select data-m>'+MN.map((x,i)=>'<option value="'+(i+1)+'"'+(i+1===m?' selected':'')+'>'+x+'</option>').join('')+'</select><select data-y>'+ys+'</select><button type="button" class="b g" data-s="1">‹</button></div><div class="cal">'+['ش','ی','د','س','چ','پ','ج'].map(x=>'<span>'+x+'</span>').join('')+c+'</div><div class="rw"><button type="button" class="b g" data-t="1">امروز</button><button type="button" class="b g" data-c="1">پاک کردن</button><button type="button" class="b g" data-x="1">بستن</button></div></div>';
+ };
+ o.onchange=e=>{const t=e.target;if('m' in t.dataset)m=+t.value;else if('y' in t.dataset)y=+t.value;draw()};
+ o.onclick=e=>{
+  if(e.target===o){o.remove();return}
+  const t=e.target.closest('button');if(!t)return;const D=t.dataset;
+  if(D.s){m+=+D.s;if(m>12){m=1;y++}if(m<1){m=12;y--}draw()}
+  else if(D.d){inp.value=y+'/'+p2(m)+'/'+p2(D.d);o.remove()}
+  else if(D.t){inp.value=td.replace(/-/g,'/');o.remove()}
+  else if(D.c){inp.value='';o.remove()}
+  else if(D.x){o.remove()}
+ };
+ draw();document.body.append(o);
+}
+/* ---------- فرم ---------- */
+function form(title,fields,ok){
+ fields.forEach(f=>{if(f.t==='n'&&f.v!=null&&f.v!=='')f.v=Number(f.v).toLocaleString('en-US')});
+ const m=document.createElement('div');m.className='mo';
+ m.innerHTML='<form class="sh"><h2>'+title+'</h2>'+fields.map(f=>'<label>'+(f.t==='check'?'<input type="checkbox" name="'+f.k+'"'+(f.v?' checked':'')+'>'+f.l:f.l+(f.t==='select'?'<select name="'+f.k+'">'+f.o.map(o=>'<option value="'+esc(o[0])+'"'+(String(o[0])===String(f.v)?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select>':f.t==='d'?'<input name="'+f.k+'" value="'+esc(f.v??'')+'" readonly class="dt" placeholder="انتخاب تاریخ" onclick="pick(this)">':'<input name="'+f.k+'" value="'+esc(f.v??'')+'" inputmode="'+(f.t==='n'?'numeric':'text')+'" autocomplete="off"'+(f.t==='n'?' oninput="fnum(this,'+(f.m?1:0)+')"':'')+'>'+(f.m?'<small class="mu"></small>':'')))+'</label>').join('')+'<div class="rw"><button class="b">ذخیره</button><button type="button" class="b g" onclick="this.closest(\'.mo\').remove()">انصراف</button></div></form>';
+ m.querySelectorAll('input[oninput]').forEach(i=>i.dispatchEvent(new Event('input')));
+ m.querySelector('form').onsubmit=e=>{e.preventDefault();const o={};
+  fields.forEach(f=>{const el=e.target.elements[f.k];o[f.k]=f.t==='check'?el.checked:f.t==='n'?+nd(el.value).replace(/[,٬\s]/g,''):f.t==='d'?normDate(el.value):el.value.trim()});
+  for(const f of fields){if(f.req&&(!o[f.k]||(f.t==='n'&&isNaN(o[f.k])))){alert('«'+f.l+'» را درست وارد کن');return}}
+  m.remove();ok(o)};
+ document.body.append(m);
+}
+
+/* ---------- صفحه‌ها ---------- */
+let V={t:'farmers'};
+function go(t,id){V={t,id};render();scrollTo(0,0)}
+const BAL=`sum(case when type='payment' then -amount else amount end)`;
+const money=b=>'<b class="'+(b>0?'dn':'up')+'">'+fmt(b)+'</b>';
+
+function vFarmers(){
+ const bal={};q('select farmer_id f,'+BAL+' b from transactions group by farmer_id').forEach(r=>bal[r.f]=r.b);
+ const fs=q('select * from farmers order by name');
+ const tot=Object.values(bal).reduce((a,b)=>a+b,0);
+ return '<div class="tot"><small>جمع کل بدهی مرغداران (تومان)</small><b>'+fmt(tot)+'</b></div>'
+ +'<div class="acts"><button class="b" onclick="addFarmer()">+ مرغدار جدید</button></div>'
+ +(fs.length?fs.map(f=>'<div class="cd rw tap" onclick="go(\'farmer\','+f.id+')"><span>'+esc(f.name)+'<br><span class="mu">'+esc(f.phone)+'</span></span>'+money(bal[f.id]||0)+'</div>').join(''):'<p class="mu">هنوز مرغداری ثبت نشده. اول یه مرغدار اضافه کن.</p>');
+}
+function vFarmer(id){
+ const f=q('select * from farmers where id=?',[id])[0];if(!f)return vFarmers();
+ const b=q('select '+BAL+' b from transactions where farmer_id=?',[id])[0].b||0;
+ const hs=q('select * from halls where farmer_id=? order by contract_end is not null,name',[id]);
+ const tx=q('select t.*,h.name hn from transactions t left join halls h on h.id=t.hall_id where t.farmer_id=? order by t.date desc,t.id desc',[id]);
+ const L={charge:'هزینه ماهانه پروانه',debt:'بدهی',payment:'پرداخت'};
+ return '<a class="mu tap" onclick="go(\'farmers\')">› مرغداران</a><h2>'+esc(f.name)+'</h2>'
+ +'<div class="tot"><small>مانده حساب (تومان)</small><b>'+fmt(b)+'</b></div>'
+ +'<div class="acts"><button class="b" onclick="addTx('+id+',\'payment\')">ثبت پرداخت</button><button class="b g" onclick="addTx('+id+',\'debt\')">افزودن بدهی</button><button class="b g" onclick="addHall('+id+')">+ سالن</button><button class="b g" onclick="editFarmer('+id+')">ویرایش مرغدار</button><button class="b g" onclick="stmtMenu('+id+')">صورت‌حساب</button></div>'
+ +'<h2>سالن‌ها</h2>'+(hs.length?hs.map(h=>'<div class="cd rw tap" onclick="go(\'hall\','+h.id+')"><span>'+esc(h.name)+' <span class="mu">'+fmt(h.capacity)+' قطعه · '+BT[h.bird_type]+hallSt(h)+'</span></span><span class="tag'+(h.contract_end?'':' on')+'">'+(h.contract_end?'فسخ شده':'فعال')+'</span></div>').join(''):'<p class="mu">سالنی ثبت نشده.</p>')
+ +'<h2>تاریخچه حساب</h2>'+tx.map(t=>'<div class="cd rw"><span>'+L[t.type]+(t.hn?' · '+esc(t.hn):'')+'<br><span class="mu">'+shown(t.date)+(t.note&&t.type!=='charge'?' · '+esc(t.note):'')+'</span></span><span>'+(t.type==='payment'?'<span class="up">−'+fmt(t.amount)+'</span>':'<span class="dn">'+fmt(t.amount)+'</span>')+(t.type!=='charge'?' <a class="mu tap" onclick="delTx('+t.id+')">✕</a>':'')+'</span></div>').join('');
+}
+function vHall(id){
+ const h=q('select h.*,f.name fn from halls h join farmers f on f.id=h.farmer_id where h.id=?',[id])[0];if(!h)return vHalls();
+ const cy=q('select * from cycles where hall_id=? order by placement_date desc',[id]);
+ const ch=q(`select count(*) n,sum(amount) s from transactions where hall_id=? and type='charge'`,[id])[0];
+ return '<a class="mu tap" onclick="go(\'farmer\','+h.farmer_id+')">› '+esc(h.fn)+'</a><h2>'+esc(h.name)+'</h2>'
+ +'<div class="cd">'+[['آدرس',h.address],['ظرفیت',fmt(h.capacity)+' قطعه'],['نوع مرغ',BT[h.bird_type]],['مالک',h.owner_name],['نام کاربری قرنطینه',h.q_user,1],['پسورد قرنطینه',h.q_pass,1],['کد اپیدمیولوژیک',h.epi_code,1],['کد یکتا',h.unique_code,1],['شروع قرارداد',shown(h.contract_start)],['پایان قرارداد',shown(h.contract_end)],['جمع هزینه پروانه',fmt(ch.s)+' تومان ('+fmt(ch.n)+' ماه)']].map(r=>'<div class="rw"><span class="mu">'+r[0]+'</span><span'+(r[2]&&r[1]?' class="tap" onclick="cp(this)"':'')+'>'+esc(r[1]||'—')+'</span></div>').join('')+'</div>'
+ +'<div class="acts"><button class="b" onclick="addCycle('+id+')">+ دوره جدید</button><button class="b g" onclick="editHall('+id+')">ویرایش سالن</button>'+(h.contract_end?'':'<button class="b r" onclick="endHall('+id+')">فسخ قرارداد</button>')+'</div>'
+ +'<h2>دوره‌ها</h2>'+(cy.length?cy.map((c,i)=>'<div class="cd rw tap" onclick="go(\'cycle\','+c.id+')"><b>دوره '+fa(cy.length-i)+'</b><span>جوجه‌ریزی: '+shown(c.placement_date)+'</span><span class="mu">'+cyTxt(c)+'</span></div>').join(''):'<p class="mu">دوره‌ای ثبت نشده.</p>');
+}
+function vHalls(){
+ const hs=q('select h.*,f.name fn from halls h join farmers f on f.id=h.farmer_id').map(h=>{h.c=h.contract_end?null:activeCycle(h.id);h.a=h.c?cyAge(h.c.id):null;h.s=h.c?cyStats(h.c.id):null;return h});
+ const rank=h=>h.contract_end?3:!h.c?2:h.a==null?1:0;
+ hs.sort((x,y)=>rank(x)-rank(y)||(y.a||0)-(x.a||0)||x.name.localeCompare(y.name,'fa'));
+ return '<div class="acts"><button class="b" onclick="addHall()">+ سالن جدید</button></div>'+(hs.length?hs.map(h=>{
+  let t='';
+  if(!h.contract_end){
+   if(!h.c)t='<span class="tag">خالی</span>';
+   else{
+    const s=h.s,lp=s.tot?s.losses*100/s.tot:0;
+    t='<span class="tag age">'+(h.a==null?'در حال پرورش':'سن '+fa(h.a)+' روز')+'</span>';
+    if(s.tot)t+=' <span class="mu">موجود '+fmt(s.rem)+' قطعه</span>';
+    if(lp>10)t+=' <span class="dn">تلفات '+lp.toLocaleString('fa-IR',{maximumFractionDigits:1})+'٪</span>';
+    if(s.loaded>0)t+=' <span class="mu">'+(s.rem>0?'در حال بارگیری':'بارگیری تمام شد')+'</span>';
+    else if(h.c.loading_date){const d=dnum(h.c.loading_date)-dnum(today());if(d>0)t+=' <span class="mu">'+fa(d)+' روز تا بارگیری</span>'}
+   }
+  }
+  return '<div class="cd tap" onclick="go(\'hall\','+h.id+')"><div class="rw"><b>'+esc(h.name)+'</b><span class="tag'+(h.contract_end?'':' on')+'">'+(h.contract_end?'فسخ شده':'فعال')+'</span></div><div class="mu">'+esc(h.fn)+' · '+fmt(h.capacity)+' قطعه · '+BT[h.bird_type]+'</div>'+(t?'<div>'+t+'</div>':'')+'</div>'}).join(''):'<p class="mu">سالنی ثبت نشده.</p>');
+}
+function vSet(){
+ const cur=t=>{const r=q('select * from tariffs where bird_type=? and effective_from<=? order by effective_from desc limit 1',[t,today().slice(0,7)])[0];return r?fmt(r.price_per_bird)+' تومان':'تعیین نشده'};
+ return ''+setExtra()+'<h2>هزینه ماهانه پروانه مرغداری (هر قطعه)</h2>'+['broiler','layer'].map(t=>'<div class="cd rw"><span>مرغ '+BT[t]+'<br><span class="mu">'+cur(t)+'</span></span><button class="b g" onclick="setTariff(\''+t+'\')">تغییر</button></div>').join('')
+ +'<p class="mu">تعرفه جدید از ماه بعد اعمال میشه و ماه‌های قبل دست نمیخوره.</p>'
+ +'<h2>پشتیبان‌گیری</h2>'+dirUI()+'<div class="acts"><button class="b g" onclick="exp()">دانلود فایل پشتیبان</button><button class="b g" onclick="$(\'#imp\').click()">بازیابی از فایل</button><input id="imp" type="file" hidden onchange="imp(this)"></div><div class="ft"><a href="https://t.me/aasgharae" target="_blank" rel="noopener">طراحی و اجرا: @aasgharae</a></div>';
+}
+function render(){
+ ['farmers','halls','set'].forEach(k=>$('#n-'+k).classList.toggle('on',k===V.t||(k==='farmers'&&V.t==='farmer')||(k==='halls'&&(V.t==='hall'||V.t==='cycle'))));
+ $('#app').innerHTML=banner()+{farmers:vFarmers,farmer:()=>vFarmer(V.id),halls:vHalls,hall:()=>vHall(V.id),cycle:()=>vCycle(V.id),set:vSet}[V.t]();
+}
+
+/* ---------- عملیات ---------- */
+function addFarmer(){form('مرغدار جدید',[{k:'n',l:'نام',req:1},{k:'p',l:'تلفن'}],o=>{run('insert into farmers(name,phone) values(?,?)',[o.n,o.p]);render()})}
+function addHall(fid){
+ const fs=q('select id,name from farmers order by name');
+ if(!fs.length){alert('اول یه مرغدار ثبت کن');return}
+ form('سالن جدید',[{k:'f',l:'مرغدار',t:'select',o:fs.map(f=>[f.id,f.name]),v:fid},{k:'n',l:'نام سالن',req:1},{k:'a',l:'آدرس'},{k:'c',l:'ظرفیت (قطعه)',t:'n',req:1},
+  {k:'b',l:'نوع مرغ',t:'select',o:[['broiler','گوشتی'],['layer','تخمگذار']]},{k:'o',l:'مالک'},{k:'qu',l:'نام کاربری قرنطینه'},{k:'qp',l:'پسورد قرنطینه'},{k:'ep',l:'کد اپیدمیولوژیک'},{k:'uc',l:'کد یکتا'},{k:'s',l:'شروع قرارداد (مثلا 1405/08/01)',t:'d',v:today().replace(/-/g,'/'),req:1},
+  {k:'cf',l:'ماه شروع قرارداد هم محاسبه شود',t:'check',v:1},{k:'dbt',l:'بدهی اولیه (تومان، اختیاری)',t:'n',m:1}],
+  o=>{db.run('insert into halls(name,address,capacity,bird_type,owner_name,q_user,q_pass,epi_code,unique_code,farmer_id,contract_start,charge_first) values(?,?,?,?,?,?,?,?,?,?,?,?)',[o.n,o.a,o.c,o.b,o.o,o.qu,o.qp,o.ep,o.uc,+o.f,o.s,o.cf?1:0]);
+   const hid=q('select last_insert_rowid() r')[0].r;
+   if(o.dbt>0)db.run("insert into transactions(farmer_id,hall_id,type,amount,date,note) values(?,?,'debt',?,?,?)",[+o.f,hid,o.dbt,today(),'بدهی اولیه']);
+   charges();render()});
+}
+function addTx(fid,type){
+ form(type==='payment'?'ثبت پرداخت':'افزودن بدهی',[{k:'a',l:'مبلغ (تومان)',t:'n',req:1,m:1},{k:'d',l:'تاریخ',t:'d',v:today().replace(/-/g,'/'),req:1},{k:'t',l:'توضیح'}],
+  o=>{run('insert into transactions(farmer_id,type,amount,date,note) values(?,?,?,?,?)',[fid,type,o.a,o.d,o.t]);render()});
+}
+function editFarmer(id){
+ const f=q('select * from farmers where id=?',[id])[0];
+ form('ویرایش مرغدار',[{k:'n',l:'نام',v:f.name,req:1},{k:'p',l:'تلفن',v:f.phone}],o=>{run('update farmers set name=?,phone=? where id=?',[o.n,o.p,id]);render()});
+}
+function editHall(id){
+ const h=q('select * from halls where id=?',[id])[0];
+ const fs=q('select id,name from farmers order by name');
+ form('ویرایش سالن',[{k:'f',l:'مرغدار',t:'select',o:fs.map(f=>[f.id,f.name]),v:h.farmer_id},{k:'n',l:'نام سالن',v:h.name,req:1},{k:'a',l:'آدرس',v:h.address},{k:'c',l:'ظرفیت (قطعه)',t:'n',v:h.capacity,req:1},
+  {k:'b',l:'نوع مرغ',t:'select',o:[['broiler','گوشتی'],['layer','تخمگذار']],v:h.bird_type},{k:'o',l:'مالک',v:h.owner_name},{k:'qu',l:'نام کاربری قرنطینه',v:h.q_user},{k:'qp',l:'پسورد قرنطینه',v:h.q_pass},{k:'ep',l:'کد اپیدمیولوژیک',v:h.epi_code},{k:'uc',l:'کد یکتا',v:h.unique_code},
+  {k:'s',l:'شروع قرارداد',t:'d',v:h.contract_start.replace(/-/g,'/'),req:1},{k:'cf',l:'ماه شروع قرارداد هم محاسبه شود',t:'check',v:h.charge_first},
+  {k:'e',l:'پایان قرارداد (خالی = فعال)',t:'d',v:(h.contract_end||'').replace(/-/g,'/')},{k:'cl',l:'ماه پایان هم محاسبه شود',t:'check',v:h.charge_last}],
+  o=>{
+   db.run('update halls set farmer_id=?,name=?,address=?,capacity=?,bird_type=?,owner_name=?,q_user=?,q_pass=?,epi_code=?,unique_code=?,contract_start=?,charge_first=?,contract_end=?,charge_last=? where id=?',[+o.f,o.n,o.a,o.c,o.b,o.o,o.qu,o.qp,o.ep,o.uc,o.s,o.cf?1:0,o.e||null,o.cl?1:0,id]);
+   db.run('update transactions set farmer_id=? where hall_id=?',[+o.f,id]);
+   const s=o.cf?o.s.slice(0,7):nextM(o.s.slice(0,7));
+   db.run(`delete from transactions where hall_id=? and type='charge' and month_key<?`,[id,s]);
+   if(o.e){const x=o.cl?o.e.slice(0,7):prevM(o.e.slice(0,7));db.run(`delete from transactions where hall_id=? and type='charge' and month_key>?`,[id,x])}
+   charges();render()});
+}
+function delTx(id){
+ if(!confirm('این ردیف حذف شود؟'))return;
+ const t=q('select cycle_id c from transactions where id=?',[id])[0];
+ db.run('delete from transactions where id=?',[id]);
+ if(t&&t.c)db.run('update cycles set system_cost=0 where id=?',[t.c]);
+ save();render();
+}
+/* ---------- مبلغ، پوشه، صورت‌حساب ---------- */
+function w3(n){
+ const o=['','یک','دو','سه','چهار','پنج','شش','هفت','هشت','نه'],t=['ده','یازده','دوازده','سیزده','چهارده','پانزده','شانزده','هفده','هجده','نوزده'],
+ d=['','','بیست','سی','چهل','پنجاه','شصت','هفتاد','هشتاد','نود'],h=['','صد','دویست','سیصد','چهارصد','پانصد','ششصد','هفتصد','هشتصد','نهصد'];
+ const a=~~(n/100),b=n%100,r=[];
+ if(a)r.push(h[a]);
+ if(b>=10&&b<20)r.push(t[b-10]);else{if(b>=20)r.push(d[~~(b/10)]);if(b%10)r.push(o[b%10])}
+ return r.join(' و ');
+}
+function words(n){
+ if(!n)return '';
+ const S=['','هزار','میلیون','میلیارد','هزار میلیارد'];let p=[],i=0;
+ while(n>0&&i<S.length){const x=n%1000;if(x)p.unshift(i===1&&x===1?'هزار':w3(x)+(S[i]?' '+S[i]:''));n=~~(n/1000);i++}
+ return p.join(' و ')+' تومان';
+}
+function fnum(el,mon){
+ const v=nd(el.value).replace(/[^\d]/g,'');
+ el.value=v?(+v).toLocaleString('en-US'):'';
+ if(mon){const s=el.parentNode.querySelector('small');if(s)s.textContent=v?words(+v):''}
+}
+function dirUI(){
+ if(!window.showDirectoryPicker)return '<p class="mu">مرورگر این گوشی به وب‌اپ اجازه‌ی ساخت یا انتخاب پوشه نمیده. برای همین دکمه‌ی «دانلود فایل پشتیبان» فایل رو با منوی اشتراک‌گذاری میفرسته و هرجا خواستی ذخیره‌ش می‌کنی.</p>';
+ return '<div class="cd rw"><span>'+(dirH?'پوشه: '+esc(dirH.name):'پوشه انتخاب نشده')+'</span><button class="b g" onclick="pickDir()">'+(dirH?'تغییر':'انتخاب پوشه')+'</button></div>'+(dirH?'<p class="mu">بعد از هر تغییر، فایل poultry.sqlite تو همین پوشه ذخیره میشه.'+(dirOk?' آخرین ذخیره: '+dirOk:'')+'</p>':'');
+}
+async function pickDir(){try{const h=await showDirectoryPicker({mode:'readwrite',id:'poultry'});dirH=h;dirPerm='granted';await idb('put',h,'dir');await toDir(db.export());render()}catch(e){}}
+async function askDir(){try{dirPerm=await dirH.requestPermission({mode:'readwrite'});await toDir(db.export())}catch(e){}render()}
+function banner(){
+ if(dirH&&dirPerm!=='granted')return '<div class="cd rw"><span class="mu">برای ذخیره تو پوشه باید دوباره اجازه بدی</span><button class="b" onclick="askDir()">اجازه</button></div>';
+ try{
+  if(!dirH&&q('select count(*) n from farmers')[0].n>0){
+   const lb=localStorage.getItem('lastBk'),d=lb?dnum(today())-dnum(lb):99;
+   if(d>14)return '<div class="cd rw"><span class="mu">'+(lb?'بیشتر از دو هفته است که بکاپ نگرفتی':'هنوز بکاپ نگرفتی')+'</span><button class="b" onclick="exp()">بکاپ بگیر</button></div>';
+  }
+ }catch(e){}
+ return '';
+}
+function stmt(fid){
+ const f=q('select * from farmers where id=?',[fid])[0];
+ const tx=q('select t.*,h.name hn from transactions t left join halls h on h.id=t.hall_id where t.farmer_id=? order by t.date,t.id',[fid]);
+ const L={charge:'هزینه ماهانه پروانه',debt:'بدهی',payment:'پرداخت'};
+ const W=1000,R=40,T=215,H=T+(tx.length+1)*R+130;
+ const c=document.createElement('canvas');c.width=W;c.height=H;
+ const x=c.getContext('2d');x.direction='rtl';x.textBaseline='middle';
+ const F=(s,b)=>{x.font=(b?'bold ':'')+s+'px Tahoma, sans-serif'};
+ const P=(t,px,py,al)=>{x.textAlign=al;x.fillText(t,px,py)};
+ x.fillStyle='#fff';x.fillRect(0,0,W,H);
+ x.fillStyle='#1d5c3f';x.fillRect(0,0,W,110);
+ x.fillStyle='#fff';F(34,1);P('صورت‌حساب مرغدار',W-30,55,'right');
+ x.fillStyle='#17261d';F(28,1);P(f.name,W-30,155,'right');
+ x.fillStyle='#68746b';F(20);P('تاریخ: '+shown(today()),30,155,'left');
+ let y=T;
+ x.fillStyle='#edf0e8';x.fillRect(20,y-R/2,W-40,R);
+ x.fillStyle='#17261d';F(18,1);
+ P('تاریخ',W-30,y,'right');P('شرح',W-140,y,'right');P('بدهکار',350,y,'center');P('پرداخت',210,y,'center');P('مانده',80,y,'center');
+ let bal=0;F(17);
+ tx.forEach((t,i)=>{
+  y+=R;
+  const d=t.type==='payment'?0:t.amount,p=t.type==='payment'?t.amount:0;bal+=d-p;
+  if(i%2){x.fillStyle='#f6f8f3';x.fillRect(20,y-R/2,W-40,R)}
+  x.fillStyle='#17261d';
+  P(shown(t.date),W-30,y,'right');
+  let s=L[t.type]+(t.type==='charge'?' '+(t.month_key||'').replace('-','/'):'')+(t.hn?' · '+t.hn:'')+(t.type==='debt'&&t.note?' · '+t.note:'');
+  while(x.measureText(s).width>400&&s.length>4)s=s.slice(0,-2);
+  P(s,W-140,y,'right');
+  if(d){x.fillStyle='#b8372b';P(fmt(d),350,y,'center')}
+  if(p){x.fillStyle='#1d7a4d';P(fmt(p),210,y,'center')}
+  x.fillStyle='#17261d';P(fmt(bal),80,y,'center');
+ });
+ y+=R+55;
+ x.fillStyle=bal>0?'#b8372b':'#1d7a4d';F(30,1);P('مانده نهایی: '+fmt(bal)+' تومان',W-30,y,'right');
+ c.toBlob(async b=>{
+  const file=new File([b],'statement-'+fid+'.png',{type:'image/png'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:'صورت‌حساب '+f.name});return}catch(e){if(e.name==='AbortError')return}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=file.name;a.click();
+ });
+}
+/* ---------- تنظیمات، بارگیری، ارسال صورت‌حساب ---------- */
+function getS(k){const r=q('select v from settings where k=?',[k])[0];return r?r.v:''}
+function putS(k,v){db.run('insert or replace into settings(k,v) values(?,?)',[k,String(v)])}
+const fmtCard=c=>String(c).replace(/(\d{4})(?=\d)/g,'$1 ');
+function setExtra(){
+ const fee=+getS('fee')||0,card=getS('card'),sh=getS('sheba');
+ return '<h2>هزینه سیستم بارگیری</h2><div class="cd rw"><span>به ازای هر راس<br><span class="mu">'+(fee?fmt(fee)+' تومان':'تعیین نشده')+'</span></span><button class="b g" onclick="setFee()">تغییر</button></div>'
+ +'<h2>اطلاعات پرداخت</h2><div class="cd rw"><span>کارت: '+esc(card?fmtCard(card):'—')+'<br>شبا: '+esc(sh||'—')+'</span><button class="b g" onclick="setBank()">ویرایش</button></div>';
+}
+function setFee(){
+ form('هزینه سیستم بارگیری',[{k:'p',l:'تومان به ازای هر راس',t:'n',v:+getS('fee')||'',req:1,m:1}],o=>{putS('fee',o.p);save();render()});
+}
+function setBank(){
+ form('اطلاعات پرداخت',[{k:'c',l:'شماره کارت',v:getS('card')},{k:'s',l:'شماره شبا',v:getS('sheba')}],o=>{
+  const c=nd(o.c).replace(/\D/g,'');let s=nd(o.s).replace(/\s/g,'').toUpperCase();
+  if(s&&!s.startsWith('IR'))s='IR'+s;
+  if(c&&c.length!==16){alert('شماره کارت باید ۱۶ رقم باشه');return}
+  if(s&&!/^IR\d{24}$/.test(s)){alert('شماره شبا باید IR و ۲۴ رقم باشه');return}
+  putS('card',c);putS('sheba',s);save();render()});
+}
+function cyStats(id){
+ const c=q('select losses from cycles where id=?',[id])[0]||{losses:0},ls=c.losses||0;
+ const t=q('select ifnull(sum(cnt),0) s from placements where cycle_id=?',[id])[0].s;
+ const l=q('select ifnull(sum(cnt),0) s,min(date) a,max(date) b from loadings where cycle_id=?',[id])[0];
+ return{tot:t,losses:ls,loaded:l.s,lstart:l.a,lend:l.b,load:t-ls,rem:t-ls-l.s};
+}
+function addLoading(cid){
+ const s=cyStats(cid);
+ form('ثبت بارگیری',[{k:'d',l:'تاریخ بارگیری',t:'d',v:today().replace(/-/g,'/'),req:1},{k:'n',l:'تعداد بارگیری (قطعه)',t:'n',req:1}],o=>{
+  if(o.n>s.rem&&!confirm('تعداد بیشتر از مانده‌ی سالن ('+fmt(s.rem)+') است. ادامه؟'))return;
+  db.run('insert into loadings(cycle_id,date,cnt) values(?,?,?)',[cid,o.d,o.n]);
+  const lid=q('select last_insert_rowid() r')[0].r,fee=+getS('fee')||0;
+  if(fee>0){
+   const h=q('select h.id,h.farmer_id from halls h join cycles c on c.hall_id=h.id where c.id=?',[cid])[0];
+   db.run("insert into transactions(farmer_id,hall_id,type,amount,date,note,cycle_id,loading_id) values(?,?,'debt',?,?,?,?,?)",[h.farmer_id,h.id,o.n*fee,o.d,'هزینه سیستم بارگیری',cid,lid]);
+  }
+  save();render();
+  if(!fee)alert('هزینه سیستم بارگیری تو تنظیمات تعیین نشده، بدهی اضافه نشد.');
+ });
+}
+function delLoading(id){
+ if(!confirm('این بارگیری و هزینه‌ی سیستمش حذف شود؟'))return;
+ db.run('delete from transactions where loading_id=?',[id]);db.run('delete from loadings where id=?',[id]);save();render();
+}
+function stmtMenu(fid){
+ const m=document.createElement('div');m.className='mo';
+ m.innerHTML='<div class="sh"><h2>ارسال صورت‌حساب</h2><div class="acts"><button class="b" data-k="i">عکس</button><button class="b" data-k="t">متن آماده</button><button class="b g" data-k="x">انصراف</button></div></div>';
+ m.onclick=e=>{const k=e.target.dataset.k;if(e.target===m||k==='x'){m.remove();return}if(k==='i'){m.remove();stmt(fid)}if(k==='t'){m.remove();stmtText(fid)}};
+ document.body.append(m);
+}
+function stmtText(fid){
+ const f=q('select * from farmers where id=?',[fid])[0];
+ const bal=q('select '+BAL+' b from transactions where farmer_id=?',[fid])[0].b||0;
+ const card=getS('card'),sh=getS('sheba');
+ let t='با سلام و احترام\nمرغدار محترم آقای '+f.name+'\n';
+ if(bal>0){t+='مجموع صورتحساب مبلغ '+fmt(bal)+' تومان ('+words(bal)+')';if(card)t+='\nشماره کارت: '+fmtCard(card);if(sh)t+='\nشماره شبا: '+sh}
+ else t+='حساب شما تسویه است.';
+ const m=document.createElement('div');m.className='mo';
+ m.innerHTML='<div class="sh"><h2>متن صورت‌حساب</h2><textarea rows="8" style="width:100%;padding:10px;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px"></textarea><div class="acts"><button class="b" data-k="s">ارسال</button><button class="b g" data-k="t">تلگرام</button><button class="b g" data-k="w">واتساپ</button><button class="b g" data-k="c">کپی</button><button class="b g" data-k="x">بستن</button></div></div>';
+ const ta=m.querySelector('textarea');ta.value=t;
+ m.onclick=async e=>{
+  const k=e.target.dataset.k;if(e.target===m||k==='x'){m.remove();return}
+  const v=ta.value;
+  if(k==='s'){if(navigator.share){try{await navigator.share({text:v})}catch(x){}}else{try{await navigator.clipboard.writeText(v);alert('کپی شد')}catch(x){ta.select()}}}
+  if(k==='t')window.open('https://t.me/share/url?url=%20&text='+encodeURIComponent(v));
+  if(k==='w')window.open('https://wa.me/?text='+encodeURIComponent(v));
+  if(k==='c'){try{await navigator.clipboard.writeText(v);alert('کپی شد')}catch(x){ta.select()}}
+ };
+ document.body.append(m);
+}
+function cp(el){
+ const t=el.textContent;
+ try{navigator.clipboard.writeText(t).then(()=>{el.textContent='کپی شد ✔';setTimeout(()=>{el.textContent=t},900)})}catch(e){}
+}
+/* ---------- دوره پرورش ---------- */
+function cyAge(cid){const d=q('select min(date) d from placements where cycle_id=?',[cid])[0].d;return d?dnum(today())-dnum(d):null}
+function activeCycle(hid){return q('select * from cycles where hall_id=? and end_date is null order by placement_date desc limit 1',[hid])[0]}
+function hallSt(h){if(h.contract_end)return '';const c=activeCycle(h.id);if(!c)return ' · خالی';const a=cyAge(c.id);return a==null?' · در حال پرورش':' · سن '+fa(a)+' روز'}
+function cyTxt(c){if(c.end_date)return 'اعلام خاتمه: '+shown(c.end_date);const a=cyAge(c.id);return a==null?'':'سن '+fa(a)+' روز'}
+const pc=(a,b)=>b?' ('+(a*100/b).toLocaleString('fa-IR',{maximumFractionDigits:1})+'٪)':'';
+function syncCy(id){db.run('update cycles set placement_date=(select min(date) from placements where cycle_id=?) where id=? and exists(select 1 from placements where cycle_id=?)',[id,id,id])}
+function vCycle(id){
+ const c=q('select c.*,h.name hn from cycles c join halls h on h.id=c.hall_id where c.id=?',[id])[0];if(!c)return vHalls();
+ const pl=q('select * from placements where cycle_id=? order by date',[id]);
+ const ld=q('select * from loadings where cycle_id=? order by date',[id]);
+ const s=cyStats(id),a=c.end_date?null:cyAge(id),lp=s.tot?s.losses*100/s.tot:0;
+ const fee=q("select ifnull(sum(amount),0) s from transactions where cycle_id=? and type='debt'",[id])[0].s;
+ const yn=v=>v?'✔ ثبت شده':'✘ ثبت نشده';
+ const R=[['کد مجوز جوجه‌ریزی',esc(c.license_code||'—')],['سن جوجه',a==null?'—':fa(a)+' روز'],['جمع جوجه ورودی',fmt(s.tot)+' قطعه'],
+  ['تعداد تلفات','<span class="'+(lp>10?'dn':'')+'">'+fmt(s.losses)+(s.tot?' ('+lp.toLocaleString('fa-IR',{maximumFractionDigits:1})+'٪)':'')+'</span>'],
+  ['قابل بارگیری',fmt(s.load)+' قطعه'],['بارگیری شده',fmt(s.loaded)+' قطعه'],['مانده در سالن',fmt(s.rem)+' قطعه'],
+  ['بیماری‌ها',esc(c.diseases||'—')],['تلفات در سیستم',yn(c.loss_logged)],['واکسن در سیستم',yn(c.vaccine_logged)],
+  ['هزینه سیستم',fee?fmt(fee)+' تومان':'—'],['پیش‌بینی بارگیری',shown(c.loading_date)],['شروع بارگیری',shown(s.lstart)],
+  ['پایان بارگیری',s.loaded&&s.rem<=0?shown(s.lend):'—'],['اعلام خاتمه',shown(c.end_date)]];
+ return '<a class="mu tap" onclick="go(\'hall\','+c.hall_id+')">› '+esc(c.hn)+'</a><h2>اطلاعات دوره</h2>'
+ +'<div class="cd">'+R.map(r=>'<div class="rw"><span class="mu">'+r[0]+'</span><span>'+r[1]+'</span></div>').join('')+'</div>'
+ +'<div class="acts"><button class="b" onclick="addPlacement('+id+')">+ ورود جوجه</button><button class="b" onclick="addLoading('+id+')">+ ثبت بارگیری</button><button class="b g" onclick="editCycle('+id+')">ویرایش دوره</button><button class="b r" onclick="delCycle('+id+')">حذف دوره</button></div>'
+ +'<h2>ورود جوجه‌ها</h2>'+(pl.length?pl.map(p=>'<div class="cd rw"><span>'+shown(p.date)+'</span><span>'+fmt(p.cnt)+' قطعه <a class="mu tap" onclick="delPlacement('+p.id+')">✕</a></span></div>').join(''):'<p class="mu">ورودی ثبت نشده.</p>')
+ +'<h2>بارگیری‌ها</h2>'+(ld.length?ld.map(p=>'<div class="cd rw"><span>'+shown(p.date)+'</span><span>'+fmt(p.cnt)+' قطعه <a class="mu tap" onclick="delLoading('+p.id+')">✕</a></span></div>').join(''):'<p class="mu">بارگیری ثبت نشده.</p>');
+}
+function addCycle(hid){
+ form('دوره جدید',[{k:'lc',l:'کد مجوز جوجه‌ریزی'},{k:'d',l:'تاریخ ورود جوجه',t:'d',v:today().replace(/-/g,'/'),req:1},{k:'n',l:'تعداد جوجه ورودی',t:'n',req:1}],o=>{
+  db.run('insert into cycles(hall_id,placement_date,license_code) values(?,?,?)',[hid,o.d,o.lc]);
+  const id=q('select last_insert_rowid() r')[0].r;
+  db.run('insert into placements(cycle_id,date,cnt) values(?,?,?)',[id,o.d,o.n]);
+  save();go('cycle',id)});
+}
+function addPlacement(cid){
+ form('ورود جوجه',[{k:'d',l:'تاریخ ورود',t:'d',v:today().replace(/-/g,'/'),req:1},{k:'n',l:'تعداد جوجه',t:'n',req:1}],o=>{
+  db.run('insert into placements(cycle_id,date,cnt) values(?,?,?)',[cid,o.d,o.n]);syncCy(cid);save();render()});
+}
+function delPlacement(id){
+ if(!confirm('این ردیف حذف شود؟'))return;
+ const c=q('select cycle_id c from placements where id=?',[id])[0].c;
+ db.run('delete from placements where id=?',[id]);syncCy(c);save();render();
+}
+function editCycle(id){
+ const c=q('select * from cycles where id=?',[id])[0],r=s=>(s||'').replace(/-/g,'/');
+ form('ویرایش دوره',[{k:'lc',l:'کد مجوز جوجه‌ریزی',v:c.license_code},
+  {k:'ls',l:'تعداد تلفات (جمع کل دوره)',t:'n',v:c.losses||0},
+  {k:'ds',l:'بیماری‌های دوره (با ویرگول جدا کن)',v:c.diseases},
+  {k:'ll',l:'تلفات در سیستم ثبت شد',t:'check',v:c.loss_logged},
+  {k:'vl',l:'واکسن در سیستم ثبت شد',t:'check',v:c.vaccine_logged},
+  {k:'b1',l:'تاریخ پیش‌بینی بارگیری',t:'d',v:r(c.loading_date)},
+  {k:'en',l:'تاریخ اعلام خاتمه دوره',t:'d',v:r(c.end_date)}],o=>{
+  db.run('update cycles set license_code=?,losses=?,diseases=?,loss_logged=?,vaccine_logged=?,loading_date=?,end_date=? where id=?',[o.lc,o.ls||0,o.ds,o.ll?1:0,o.vl?1:0,o.b1||null,o.en||null,id]);
+  save();render()});
+}
+function delCycle(id){
+ if(!confirm('کل این دوره حذف شود؟'))return;
+ const h=q('select hall_id h from cycles where id=?',[id])[0].h;
+ db.run('delete from placements where cycle_id=?',[id]);db.run('delete from transactions where cycle_id=?',[id]);db.run('delete from loadings where cycle_id=?',[id]);db.run('delete from cycles where id=?',[id]);
+ save();go('hall',h);
+}
+function endHall(id){
+ form('فسخ قرارداد',[{k:'e',l:'تاریخ پایان',t:'d',v:today().replace(/-/g,'/'),req:1},{k:'cl',l:'ماه پایان هم محاسبه شود',t:'check',v:1}],o=>{
+  const last=o.cl?o.e.slice(0,7):prevM(o.e.slice(0,7));
+  db.run('update halls set contract_end=?,charge_last=? where id=?',[o.e,o.cl?1:0,id]);
+  db.run(`delete from transactions where hall_id=? and type='charge' and month_key>?`,[id,last]);
+  charges();render()});
+}
+function setTariff(t){
+ form('تعرفه مرغ '+BT[t],[{k:'p',l:'تومان برای هر قطعه در ماه',t:'n',req:1,m:1}],o=>{
+  const has=q('select count(*) n from tariffs where bird_type=?',[t])[0].n;
+  const eff=has?nextM(today().slice(0,7)):'0000-00';
+  db.run('delete from tariffs where bird_type=? and effective_from=?',[t,eff]);
+  db.run('insert into tariffs(bird_type,price_per_bird,effective_from) values(?,?,?)',[t,o.p,eff]);
+  charges();render()});
+}
+async function exp(){
+ const b=new Blob([db.export()],{type:'application/octet-stream'}),f=new File([b],'poultry-'+today()+'.sqlite',{type:'application/octet-stream'});
+ try{localStorage.setItem('lastBk',today())}catch(e){}
+ if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});render();return}catch(e){if(e.name==='AbortError')return}}
+ const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f.name;a.click();render();
+}
+function imp(inp){const f=inp.files[0];if(!f||!confirm('اطلاعات فعلی با فایل جایگزین میشه. ادامه؟'))return;f.arrayBuffer().then(b=>{db=new SQL.Database(new Uint8Array(b));initDb();charges();render()})}
+
+/* ---------- شروع ---------- */
+initSqlJs({locateFile:f=>'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/'+f}).then(async S=>{
+ SQL=S;const d=await idb('get');
+ try{dirH=await idb('get',null,'dir');if(dirH)dirPerm=await dirH.queryPermission({mode:'readwrite'})}catch(e){}db=d?new S.Database(d):new S.Database();
+ initDb();charges();render();
+ navigator.storage&&navigator.storage.persist&&navigator.storage.persist();
+}).catch(e=>{$('#app').innerHTML='<p class="dn">دیتابیس بالا نیومد: '+esc(e.message||e)+'</p>'});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
