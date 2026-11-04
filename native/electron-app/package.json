@@ -1,0 +1,20 @@
+{
+  "name": "poultry-manager",
+  "version": "1.0.0",
+  "description": "Poultry farm manager",
+  "main": "main.js",
+  "scripts": {
+    "dist": "electron-builder --win portable --publish never"
+  },
+  "build": {
+    "appId": "app.poultry.manager",
+    "productName": "Poultry Manager",
+    "files": ["main.js", "preload.js", "www/**"],
+    "directories": { "output": "dist" },
+    "win": { "target": "portable" }
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  }
+}
